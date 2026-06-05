@@ -54,6 +54,12 @@ Unlike high-level frameworks that hide training details behind a single API call
 
 ---
 
+## How to run
+
+```bash
+python scaffold.py
+```
+
 ## Concepts Implemented
 
 ### Random Number Generation
