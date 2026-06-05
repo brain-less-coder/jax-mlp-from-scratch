@@ -1,0 +1,214 @@
+"""
+Build an MLP in JAX from Scratch
+
+Assembled from your step-by-step solutions.
+"""
+
+import numpy as np
+
+# Step 1 - make_prng_key
+import jax
+import jax.numpy as jnp
+
+
+def make_prng_key(seed):
+    # TODO: wrap a Python integer seed into a JAX PRNG key (uint32 array of shape (2,))
+    return jax.random.PRNGKey(seed)
+
+# Step 2 - split_prng_key
+import jax
+
+def split_prng_key(key, num):
+    # TODO: split `key` into `num` independent subkeys and return them as a (num, 2) array.
+    return jax.random.split(key,num)
+
+# Step 3 - sample_normal_matrix
+import jax
+import jax.numpy as jnp
+
+def sample_normal_matrix(key, shape):
+    # TODO: return a jnp array of the given shape with i.i.d. N(0,1) samples drawn from key
+    return jax.random.normal(key,shape)
+
+# Step 4 - sample_input_features
+import jax
+import jax.numpy as jnp
+
+def sample_input_features(key, batch_size, num_features):
+    """Sample a (batch_size, num_features) standard-normal feature batch."""
+    # TODO: draw a batch of random input feature vectors from the PRNG key
+    return sample_normal_matrix(key, (batch_size, num_features))
+
+# Step 5 - assign_class_labels
+import jax.numpy as jnp
+
+def assign_class_labels(inputs, num_classes):
+    labels = jnp.argmax(inputs[:, :num_classes], axis=1)
+    return labels.astype(jnp.int32)
+
+# Step 6 - one_hot_encode_labels
+import jax.numpy as jnp
+
+def one_hot_encode_labels(labels, num_classes):
+    return (labels[:, None] == jnp.arange(num_classes)[None, :]).astype(jnp.float32)
+
+# Step 7 - init_linear_layer
+import jax.numpy as jnp
+
+def init_linear_layer(key, in_dim, out_dim, scale=0.1):
+    W = sample_normal_matrix(key, (in_dim, out_dim)) * scale
+    b = jnp.zeros((out_dim,), dtype=jnp.float32)
+
+    return {
+        'W': W,
+        'b': b
+    }
+
+# Step 8 - init_mlp_params
+import jax.random as random
+
+def init_mlp_params(key, layer_sizes, scale=0.1):
+    num_layers = len(layer_sizes) - 1
+
+    keys = random.split(key, num_layers)
+
+    params = [
+        init_linear_layer(
+            keys[i],
+            layer_sizes[i],
+            layer_sizes[i + 1],
+            scale
+        )
+        for i in range(num_layers)
+    ]
+
+    return params
+
+# Step 9 - linear_forward
+import jax.numpy as jnp
+
+def linear_forward(x, layer_params):
+    W = layer_params['W']
+    b = layer_params['b']
+    return x @ W + b
+
+# Step 10 - relu_activation
+import jax.numpy as jnp
+
+def relu_activation(x):
+    return jnp.maximum(0, x)
+
+# Step 11 - softmax_probabilities
+import jax.numpy as jnp
+
+def softmax_probabilities(logits):
+    shifted = logits - jnp.max(logits, axis=-1, keepdims=True)
+    exp_logits = jnp.exp(shifted)
+    return exp_logits / jnp.sum(exp_logits, axis=-1, keepdims=True)
+
+# Step 12 - mlp_forward
+def mlp_forward(params, x):
+    # Hidden layers
+    for layer in params[:-1]:
+        x = linear_forward(x, layer)
+        x = relu_activation(x)
+
+    # Output layer (no ReLU)
+    x = linear_forward(x, params[-1])
+
+    return x
+
+# Step 13 - log_softmax_logits
+import jax.numpy as jnp
+
+def log_softmax_logits(logits):
+    shifted = logits - jnp.max(logits, axis=-1, keepdims=True)
+    logsumexp = jnp.log(jnp.sum(jnp.exp(shifted), axis=-1, keepdims=True))
+    return shifted - logsumexp
+
+# Step 14 - cross_entropy_loss
+import jax.numpy as jnp
+
+def cross_entropy_loss(logits, targets):
+    log_probs = log_softmax_logits(logits)
+    return -jnp.mean(jnp.sum(targets * log_probs, axis=-1))
+
+# Step 15 - classification_accuracy
+import jax.numpy as jnp
+
+def classification_accuracy(logits, labels):
+    predictions = jnp.argmax(logits, axis=-1)
+    return jnp.mean(predictions == labels)
+
+# Step 16 - loss_fn_of_params
+import jax
+import jax.numpy as jnp
+
+def loss_fn_of_params(params, x, one_hot_targets):
+    return cross_entropy_loss(
+        mlp_forward(params, x),
+        one_hot_targets
+    )
+
+# Step 17 - compute_param_grads
+import jax
+import jax.numpy as jnp
+
+def compute_param_grads(params, x, one_hot_targets):
+    return jax.grad(loss_fn_of_params)(params, x, one_hot_targets)
+
+# Step 18 - sgd_update_params
+import jax
+import jax.numpy as jnp
+
+def sgd_update_params(params, grads, learning_rate):
+    return [
+        {
+            'W': layer['W'] - learning_rate * grad['W'],
+            'b': layer['b'] - learning_rate * grad['b']
+        }
+        for layer, grad in zip(params, grads)
+    ]
+
+# Step 19 - training_step
+import jax
+import jax.numpy as jnp
+
+def training_step(params, x, one_hot_targets, learning_rate):
+    loss = loss_fn_of_params(params, x, one_hot_targets)
+
+    grads = compute_param_grads(
+        params,
+        x,
+        one_hot_targets
+    )
+
+    new_params = sgd_update_params(
+        params,
+        grads,
+        learning_rate
+    )
+
+    return new_params, loss
+
+# Step 20 - train_mlp
+def train_mlp(params, x, one_hot_targets, learning_rate, num_epochs):
+    """Run num_epochs full-batch SGD updates and return the final params."""
+    
+    for _ in range(num_epochs):
+        params, _ = training_step(
+            params,
+            x,
+            one_hot_targets,
+            learning_rate
+        )
+
+    return params
+
+# Step 21 - predict_classes
+import jax.numpy as jnp
+
+def predict_classes(params, x):
+    logits = mlp_forward(params, x)
+    return jnp.argmax(logits, axis=-1).astype(jnp.int32)
+
